@@ -4,8 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ScrollXXX</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+<!-- Adsterra: paste your script tag here when you have your publisher code -->
+<!-- <script src="//youradsterracode.js"></script> -->
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
@@ -33,7 +36,6 @@ html, body {
   padding: 40px 20px;
   min-width: 0;
 }
-/* Only show side panels on wide screens (desktop) */
 @media (min-width: 760px) {
   .side-panel { display: flex; }
 }
@@ -52,6 +54,7 @@ html, body {
   font-size: 11px;
   letter-spacing: 1px;
   text-transform: uppercase;
+  overflow: hidden;
 }
 
 .side-panel .branding-block {
@@ -77,7 +80,6 @@ html, body {
   flex-shrink: 0;
   position: relative;
 }
-/* On mobile, use full width — phones are already ~9:16 */
 @media (max-width: 759px) {
   #feed-wrapper { width: 100vw; }
 }
@@ -98,6 +100,37 @@ html, body {
 }
 #logo .scroll { color: #fff; }
 #logo .xxx   { color: #ff2d6b; }
+
+/* ── Media type toggle (Videos / Photos) ──────────────────── */
+#media-toggle {
+  position: fixed;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  gap: 0;
+  background: rgba(255,255,255,0.06);
+  border-radius: 20px;
+  padding: 3px;
+  backdrop-filter: blur(12px);
+}
+#media-toggle button {
+  padding: 5px 16px;
+  border: none;
+  background: none;
+  border-radius: 17px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+#media-toggle button.active {
+  background: #ff2d6b;
+  color: #fff;
+}
 
 /* ── Search button ─────────────────────────────────────────── */
 #search-btn {
@@ -191,7 +224,7 @@ html, body {
 /* ── Active search indicator ───────────────────────────────── */
 #search-tag {
   position: fixed;
-  top: 58px;
+  top: 80px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
@@ -239,7 +272,7 @@ html, body {
   justify-content: center;
   overflow: hidden;
 }
-.card video {
+.card video, .card img.card-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -272,7 +305,7 @@ html, body {
   pointer-events: none;
 }
 
-/* ── Subreddit filter toggle button ────────────────────────── */
+/* ── Category filter toggle button ────────────────────────── */
 #filter-btn {
   position: fixed;
   top: 16px;
@@ -308,7 +341,7 @@ html, body {
 }
 #filter-btn.has-filter svg { stroke: #ff2d6b; }
 
-/* ── Subreddit filter panel ───────────────────────────────── */
+/* ── Category filter panel ───────────────────────────────── */
 #filter-panel {
   position: fixed;
   top: 0;
@@ -411,11 +444,6 @@ html, body {
 #filter-panel .sub-item.active .sub-name {
   color: #fff;
 }
-#filter-panel .sub-count {
-  margin-left: auto;
-  font-size: 11px;
-  color: rgba(255,255,255,0.15);
-}
 
 #filter-panel .panel-footer {
   padding: 12px 18px 0;
@@ -479,6 +507,38 @@ html, body {
 .sound-btn.muted svg .sound-wave { display: none; }
 .sound-btn.muted svg .mute-x { display: block; }
 .sound-btn:not(.muted) svg .mute-x { display: none; }
+
+/* ── Mobile ad banner between cards ──────────────────────── */
+.ad-card {
+  width: 100%;
+  height: 100dvh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  background: #0a0a0a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+}
+.ad-card .ad-container {
+  width: 90%;
+  max-width: 400px;
+  min-height: 250px;
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.015);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.ad-card .ad-label {
+  font-size: 10px;
+  color: rgba(255,255,255,0.1);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
 
 /* ── Spinner / empty / error ───────────────────────────────── */
 .spinner-wrap {
@@ -702,7 +762,6 @@ html, body {
 
 /* ── Mobile-specific fixes ───────────────────────────────── */
 @media (max-width: 759px) {
-  /* Larger touch targets on mobile */
   #filter-btn, #search-btn {
     width: 40px;
     height: 40px;
@@ -710,7 +769,7 @@ html, body {
     min-height: 40px;
   }
   #search-btn { padding: 0 12px; }
-  #search-btn span { display: none; }  /* Hide "Search" label — icon only */
+  #search-btn span { display: none; }
 
   .sound-btn {
     width: 46px;
@@ -718,27 +777,28 @@ html, body {
     bottom: 80px;
   }
 
-  /* More padding on title for bottom nav bars */
   .card .title {
     padding: 14px 14px 32px;
   }
 
-  /* Prevent iOS rubber-band overscroll */
   html, body { overscroll-behavior: none; }
   #feed { overscroll-behavior: contain; }
 
-  /* Filter panel wider on small screens */
   #filter-panel { width: 260px; }
 
-  /* Sub tag — better spacing under logo on narrow screens */
   .card .sub-tag {
     top: 60px;
     right: 10px;
   }
 
-  /* Age gate — better sizing on small screens */
   .age-box { padding: 30px 20px; }
   .age-box .age-logo { font-size: 36px; }
+
+  /* Mobile ad cards */
+  .ad-card .ad-container {
+    width: 95%;
+    min-height: 200px;
+  }
 }
 
 /* Prevent pull-to-refresh on mobile */
@@ -748,6 +808,9 @@ body { overscroll-behavior-y: contain; }
 @supports (padding-top: env(safe-area-inset-top)) {
   #logo, #search-btn, #filter-btn {
     top: calc(16px + env(safe-area-inset-top));
+  }
+  #media-toggle {
+    top: calc(48px + env(safe-area-inset-top));
   }
   .card .title {
     padding-bottom: calc(22px + env(safe-area-inset-bottom));
@@ -857,15 +920,16 @@ body { overscroll-behavior-y: contain; }
       <div class="tagline">Scroll</div>
       <div class="accent-line"></div>
     </div>
+    <!-- Adsterra: replace inner content with your ad code -->
     <div class="ad-slot" id="ad-left-1">Ad Space</div>
     <div class="ad-slot" id="ad-left-2">Ad Space</div>
   </div>
 
-  <!-- Subreddit filter panel (slides from left) -->
+  <!-- Category filter panel (slides from left) -->
   <div id="filter-backdrop"></div>
   <div id="filter-panel">
     <div class="panel-header">
-      <div class="panel-title">Subreddits</div>
+      <div class="panel-title">Categories</div>
       <button class="panel-close" id="filter-close">
         <svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
       </button>
@@ -881,13 +945,19 @@ body { overscroll-behavior-y: contain; }
   <!-- Center: feed -->
   <div id="feed-wrapper">
     <!-- Filter button (left) -->
-    <button id="filter-btn" aria-label="Filter subreddits">
+    <button id="filter-btn" aria-label="Filter categories">
       <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
     </button>
 
     <!-- Logo (click to reset feed) -->
     <div id="logo">
       <span class="scroll">Scroll</span><span class="xxx">XXX</span>
+    </div>
+
+    <!-- Media type toggle -->
+    <div id="media-toggle">
+      <button id="toggle-videos" class="active">Videos</button>
+      <button id="toggle-photos">Photos</button>
     </div>
 
     <!-- Search button -->
@@ -898,7 +968,7 @@ body { overscroll-behavior-y: contain; }
 
     <!-- Search bar (slides down) -->
     <div id="search-bar">
-      <input type="text" id="search-input" placeholder="Search videos..." autocomplete="off" />
+      <input type="text" id="search-input" placeholder="Search..." autocomplete="off" />
       <button class="close-btn" id="search-close" aria-label="Close search">
         <svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
       </button>
@@ -915,6 +985,7 @@ body { overscroll-behavior-y: contain; }
 
   <!-- Right side panel (ad space) -->
   <div class="side-panel" id="panel-right">
+    <!-- Adsterra: replace inner content with your ad code -->
     <div class="ad-slot" id="ad-right-1">Ad Space</div>
     <div class="ad-slot" id="ad-right-2">Ad Space</div>
     <div class="branding-block">
@@ -938,8 +1009,10 @@ let page     = 1;
 let loading  = false;
 let hasMore  = true;
 let query    = '';
-let activeSubs = new Set(); // empty = show all
+let activeCategories = new Set(); // empty = show all
+let mediaType = 'video'; // 'video' or 'image'
 let feedSeed = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+let cardCount = 0; // track cards for ad insertion
 
 /* ── SVG templates ─────────────────────────────────────────── */
 const SOUND_SVG = `<svg viewBox="0 0 24 24">
@@ -950,7 +1023,27 @@ const SOUND_SVG = `<svg viewBox="0 0 24 24">
   <line class="mute-x" x1="16" y1="9" x2="22" y2="15"/>
 </svg>`;
 
-/* ── Filter panel UI ───────────────────────────────────────── */
+/* ── Media type toggle ────────────────────────────────────── */
+const toggleVideos = document.getElementById('toggle-videos');
+const togglePhotos = document.getElementById('toggle-photos');
+
+toggleVideos.addEventListener('click', () => {
+  if (mediaType === 'video') return;
+  mediaType = 'video';
+  toggleVideos.classList.add('active');
+  togglePhotos.classList.remove('active');
+  resetFeed();
+});
+
+togglePhotos.addEventListener('click', () => {
+  if (mediaType === 'image') return;
+  mediaType = 'image';
+  togglePhotos.classList.add('active');
+  toggleVideos.classList.remove('active');
+  resetFeed();
+});
+
+/* ── Filter panel UI (now categories) ─────────────────────── */
 const filterBtn   = document.getElementById('filter-btn');
 const filterPanel = document.getElementById('filter-panel');
 const filterClose = document.getElementById('filter-close');
@@ -966,48 +1059,48 @@ filterClose.addEventListener('click', closeFilter);
 filterBack.addEventListener('click', closeFilter);
 
 filterClear.addEventListener('click', () => {
-  activeSubs.clear();
-  renderSubList();
+  activeCategories.clear();
+  renderCategoryList();
   filterBtn.classList.remove('has-filter');
   closeFilter();
   resetFeed();
 });
 
-// Load subreddit list from API
-async function loadSubreddits() {
+// Load categories from API
+async function loadCategories() {
   try {
     const res = await fetch('/api/stats');
     const data = await res.json();
-    window._subreddits = data.subreddits || [];
-    renderSubList();
+    window._categories = data.categories || [];
+    renderCategoryList();
   } catch(e) {}
 }
 
-function renderSubList() {
-  const subs = window._subreddits || [];
+function renderCategoryList() {
+  const cats = window._categories || [];
   subList.innerHTML = '';
-  subs.forEach(sub => {
+  cats.forEach(cat => {
     const item = document.createElement('div');
-    item.className = 'sub-item' + (activeSubs.has(sub) ? ' active' : '');
+    item.className = 'sub-item' + (activeCategories.has(cat) ? ' active' : '');
     item.innerHTML = `
       <div class="sub-check"><svg viewBox="0 0 24 24"><polyline points="4 12 10 18 20 6"/></svg></div>
-      <div class="sub-name">r/${sub}</div>
+      <div class="sub-name">${escapeHtml(cat)}</div>
     `;
     item.addEventListener('click', () => {
-      if (activeSubs.has(sub)) {
-        activeSubs.delete(sub);
+      if (activeCategories.has(cat)) {
+        activeCategories.delete(cat);
       } else {
-        activeSubs.add(sub);
+        activeCategories.add(cat);
       }
-      renderSubList();
-      filterBtn.classList.toggle('has-filter', activeSubs.size > 0);
+      renderCategoryList();
+      filterBtn.classList.toggle('has-filter', activeCategories.size > 0);
       resetFeed();
     });
     subList.appendChild(item);
   });
 }
 
-loadSubreddits();
+loadCategories();
 
 /* ── Search UI ─────────────────────────────────────────────── */
 searchBtn.addEventListener('click', () => {
@@ -1054,15 +1147,13 @@ function resetFeed() {
   page = 1;
   hasMore = true;
   loading = false;
+  cardCount = 0;
   feedSeed = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   feed.innerHTML = '';
   loadMore();
 }
 
 /* ── Audio URL helpers ─────────────────────────────────────── */
-// Reddit DASH: video and audio are separate streams.
-// Video: https://v.redd.it/abc123/DASH_720.mp4
-// Audio: https://v.redd.it/abc123/DASH_AUDIO_128.mp4 (or DASH_audio.mp4)
 function getAudioUrls(videoUrl) {
   const base = videoUrl.replace(/\/DASH_[^/]+$/, '');
   return [
@@ -1073,8 +1164,22 @@ function getAudioUrls(videoUrl) {
   ];
 }
 
-/* ── Video cards ───────────────────────────────────────────── */
-function buildCard(v) {
+/* ── Ad card builder ──────────────────────────────────────── */
+function buildAdCard() {
+  const ad = document.createElement('div');
+  ad.className = 'ad-card';
+  ad.innerHTML = `
+    <div class="ad-container" id="ad-feed-${Date.now()}">
+      <!-- Adsterra: your ad code will render here -->
+      Ad Space
+    </div>
+    <div class="ad-label">Advertisement</div>
+  `;
+  return ad;
+}
+
+/* ── Video card builder ───────────────────────────────────── */
+function buildVideoCard(v) {
   const card = document.createElement('div');
   card.className = 'card';
 
@@ -1085,14 +1190,12 @@ function buildCard(v) {
   video.playsInline = true;
   video.preload = 'metadata';
 
-  // Create hidden audio element for Reddit's separate audio stream
   const audio = document.createElement('audio');
   audio.preload = 'metadata';
   audio.loop = true;
   let audioReady = false;
   let audioFailed = false;
 
-  // Try audio URLs in order until one works
   const audioUrls = getAudioUrls(v.video_url);
   let audioAttempt = 0;
   audio.src = audioUrls[0];
@@ -1102,12 +1205,11 @@ function buildCard(v) {
     if (audioAttempt < audioUrls.length) {
       audio.src = audioUrls[audioAttempt];
     } else {
-      audioFailed = true; // No audio available for this video
+      audioFailed = true;
     }
   });
   audio.addEventListener('loadedmetadata', () => { audioReady = true; });
 
-  // Keep audio in sync with video on seek/loop
   video.addEventListener('seeked', () => {
     if (audioReady) audio.currentTime = video.currentTime;
   });
@@ -1118,7 +1220,6 @@ function buildCard(v) {
     }
   });
 
-  // Handle broken/removed videos — skip to next card
   video.addEventListener('error', () => {
     card.style.display = 'none';
     card.style.height = '0';
@@ -1127,13 +1228,12 @@ function buildCard(v) {
     if (next) next.scrollIntoView({ behavior: 'instant' });
   });
 
-  // Sound toggle button — controls audio element (video stays muted to avoid echo)
   const soundBtn = document.createElement('button');
   soundBtn.className = 'sound-btn muted';
   soundBtn.innerHTML = SOUND_SVG;
   soundBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (audioFailed) return; // No audio track exists
+    if (audioFailed) return;
     const isMuted = !audio.paused && audio.volume > 0;
     if (isMuted) {
       audio.volume = 0;
@@ -1146,7 +1246,6 @@ function buildCard(v) {
     }
   });
 
-  // Tap to play/pause (mobile UX)
   video.addEventListener('click', () => {
     if (video.paused) {
       video.play().catch(() => {});
@@ -1157,9 +1256,9 @@ function buildCard(v) {
     }
   });
 
-  // Store audio ref on card for the observer
   card._audio = audio;
   card._soundBtn = soundBtn;
+  card._isVideo = true;
 
   const title = document.createElement('div');
   title.className = 'title';
@@ -1167,7 +1266,7 @@ function buildCard(v) {
 
   const sub = document.createElement('div');
   sub.className = 'sub-tag';
-  sub.textContent = 'r/' + v.subreddit;
+  sub.textContent = v.category || 'r/' + v.subreddit;
 
   card.appendChild(video);
   card.appendChild(audio);
@@ -1175,6 +1274,50 @@ function buildCard(v) {
   card.appendChild(title);
   card.appendChild(sub);
   return card;
+}
+
+/* ── Image card builder ───────────────────────────────────── */
+function buildImageCard(v) {
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  const img = document.createElement('img');
+  img.className = 'card-img';
+  img.src = v.video_url;
+  img.alt = v.title;
+  img.loading = 'lazy';
+
+  // Handle broken images
+  img.addEventListener('error', () => {
+    card.style.display = 'none';
+    card.style.height = '0';
+    card.style.scrollSnapAlign = 'none';
+    const next = card.nextElementSibling;
+    if (next) next.scrollIntoView({ behavior: 'instant' });
+  });
+
+  card._isVideo = false;
+
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = v.title;
+
+  const sub = document.createElement('div');
+  sub.className = 'sub-tag';
+  sub.textContent = v.category || 'r/' + v.subreddit;
+
+  card.appendChild(img);
+  card.appendChild(title);
+  card.appendChild(sub);
+  return card;
+}
+
+/* ── Card builder (dispatches to video or image) ──────────── */
+function buildCard(v) {
+  if (v.media_type === 'image' || mediaType === 'image') {
+    return buildImageCard(v);
+  }
+  return buildVideoCard(v);
 }
 
 /* ── Autoplay observer ─────────────────────────────────────── */
@@ -1185,11 +1328,9 @@ const observer = new IntersectionObserver(entries => {
     if (!v) return;
     if (entry.isIntersecting) {
       v.play().catch(() => {});
-      // Audio starts muted (volume 0), user must click sound btn
     } else {
       v.pause();
       if (a) { a.pause(); a.volume = 0; }
-      // Reset sound button to muted state
       const btn = entry.target._soundBtn;
       if (btn) btn.classList.add('muted');
     }
@@ -1207,9 +1348,9 @@ async function loadMore() {
   feed.appendChild(spinner);
 
   try {
-    let url = '/api/videos?page=' + page + '&limit=20&seed=' + feedSeed;
+    let url = '/api/videos?page=' + page + '&limit=20&seed=' + feedSeed + '&type=' + mediaType;
     if (query) url += '&q=' + encodeURIComponent(query);
-    if (activeSubs.size > 0) url += '&subs=' + encodeURIComponent([...activeSubs].join(','));
+    if (activeCategories.size > 0) url += '&category=' + encodeURIComponent([...activeCategories].join(','));
 
     const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1220,16 +1361,25 @@ async function loadMore() {
     if (data.videos.length === 0 && page === 1) {
       const msg = document.createElement('div');
       msg.className = 'msg-card';
+      const typeLabel = mediaType === 'image' ? 'photos' : 'videos';
       msg.innerHTML = query
-        ? '<div class="text">No videos found for "' + escapeHtml(query) + '"</div>'
-        : '<div class="text">No videos yet.<br>Run the scraper first!</div>';
+        ? '<div class="text">No ' + typeLabel + ' found for "' + escapeHtml(query) + '"</div>'
+        : '<div class="text">No ' + typeLabel + ' yet.<br>Run the scraper first!</div>';
       feed.appendChild(msg);
       hasMore = false;
     } else {
       data.videos.forEach(v => {
+        // Insert ad card every 5 content cards
+        cardCount++;
+        if (cardCount > 0 && cardCount % 5 === 0) {
+          feed.appendChild(buildAdCard());
+        }
+
         const card = buildCard(v);
         feed.appendChild(card);
-        observer.observe(card);
+        if (card._isVideo) {
+          observer.observe(card);
+        }
       });
       hasMore = data.has_more;
       page++;
@@ -1271,17 +1421,13 @@ function passAgeGate() {
   showTutorial();
 }
 
-// Check if already verified
 if (localStorage.getItem('scrollxxx_age') === '1') {
   ageGate.classList.add('hidden');
-  // Show tutorial only on first ever visit
   if (!localStorage.getItem('scrollxxx_tut_done')) {
     showTutorial();
   } else {
     loadMore();
   }
-} else {
-  // Don't load feed until age verified
 }
 
 ageYes.addEventListener('click', () => {
@@ -1292,7 +1438,6 @@ ageNo.addEventListener('click', () => {
   window.location.href = 'https://www.google.com';
 });
 
-// Terms modal
 termsLnk.addEventListener('click', (e) => { e.preventDefault(); termsMod.classList.add('open'); });
 privLnk.addEventListener('click', (e) => { e.preventDefault(); termsMod.classList.add('open'); });
 termsCls.addEventListener('click', () => { termsMod.classList.remove('open'); });

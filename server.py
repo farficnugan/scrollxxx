@@ -3,13 +3,11 @@ import time
 import sqlite3
 import hashlib
 from collections import defaultdict
-from datetime import datetime, timezone
 from functools import wraps
 from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__, static_folder="static")
 
-# Secret key for session security (generate a real one for production)
 app.secret_key = os.environ.get("SECRET_KEY", os.urandom(32))
 
 DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -25,15 +23,15 @@ def set_security_headers(response):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    # Allow Reddit video CDN for video sources
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline' *.adsterra.com *.adsterratech.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "media-src 'self' https://v.redd.it; "
-        "img-src 'self' data:; "
-        "connect-src 'self'; "
+        "img-src 'self' data: https://i.redd.it https://preview.redd.it https://external-preview.redd.it; "
+        "connect-src 'self' *.adsterra.com *.adsterratech.com; "
+        "frame-src *.adsterra.com *.adsterratech.com; "
         "frame-ancestors 'none'"
     )
     return response
@@ -42,8 +40,8 @@ def set_security_headers(response):
 # ── Rate limiting (in-memory, per-IP) ───────────────────────────────────────
 
 _rate_store = defaultdict(list)
-RATE_LIMIT = 60        # requests per window
-RATE_WINDOW = 60       # seconds
+RATE_LIMIT = 60
+RATE_WINDOW = 60
 
 
 def rate_limit(f):
@@ -53,7 +51,6 @@ def rate_limit(f):
         if ip:
             ip = ip.split(",")[0].strip()
         now = time.time()
-        # Clean old entries
         _rate_store[ip] = [t for t in _rate_store[ip] if now - t < RATE_WINDOW]
         if len(_rate_store[ip]) >= RATE_LIMIT:
             return jsonify({"error": "Rate limit exceeded. Try again later."}), 429
@@ -83,12 +80,26 @@ def init_db():
             subreddit   TEXT NOT NULL,
             upvotes     INTEGER DEFAULT 0,
             created_utc TIMESTAMP,
-            scraped_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            scraped_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            media_type  TEXT DEFAULT 'video',
+            category    TEXT DEFAULT 'Porn'
         );
 
         CREATE INDEX IF NOT EXISTS idx_posts_subreddit ON posts(subreddit);
         CREATE INDEX IF NOT EXISTS idx_posts_upvotes ON posts(upvotes);
     """)
+
+    # Migration: add columns if they don't exist (for databases created before this version)
+    columns = [row[1] for row in conn.execute("PRAGMA table_info(posts)").fetchall()]
+    if "media_type" not in columns:
+        conn.execute("ALTER TABLE posts ADD COLUMN media_type TEXT DEFAULT 'video'")
+    if "category" not in columns:
+        conn.execute("ALTER TABLE posts ADD COLUMN category TEXT DEFAULT 'Porn'")
+    conn.commit()
+
+    # Now create indexes on the new columns (safe after migration)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_media_type ON posts(media_type)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category)")
 
     # FTS5 virtual table for fast title search
     row = conn.execute(
@@ -128,25 +139,33 @@ def index():
     return send_from_directory("static", "index.html")
 
 
+@app.route("/favicon.png")
+def favicon():
+    return send_from_directory("static", "favicon.png")
+
+
 @app.route("/api/videos")
 @rate_limit
 def api_videos():
     page = max(1, request.args.get("page", 1, type=int))
     limit = min(50, max(1, request.args.get("limit", 20, type=int)))
-    query = request.args.get("q", "").strip()[:200]  # Cap query length
-    subs_param = request.args.get("subs", "").strip()
-    seed = request.args.get("seed", "0", type=str)[:50]  # Cap seed length
+    query = request.args.get("q", "").strip()[:200]
+    media_type = request.args.get("type", "video").strip().lower()
+    cat_param = request.args.get("category", "").strip()
+    seed = request.args.get("seed", "0", type=str)[:50]
     offset = (page - 1) * limit
 
-    # Cap max offset to prevent deep pagination abuse
     if offset > 5000:
         return jsonify({"videos": [], "page": page, "has_more": False})
 
-    # Parse subreddit filter (comma-separated, alphanumeric only, max 20)
-    sub_filter = []
-    if subs_param:
-        sub_filter = [s.strip().lower() for s in subs_param.split(",")
-                      if s.strip().isalnum()][:20]
+    # Validate media_type
+    if media_type not in ("video", "image"):
+        media_type = "video"
+
+    # Parse category filter (comma-separated)
+    cat_filter = []
+    if cat_param:
+        cat_filter = [c.strip() for c in cat_param.split(",") if c.strip()][:10]
 
     conn = get_db()
     try:
@@ -157,46 +176,47 @@ def api_videos():
             if not safe_query:
                 return jsonify({"videos": [], "page": page, "has_more": False})
 
-            if sub_filter:
-                placeholders = ",".join("?" * len(sub_filter))
+            if cat_filter:
+                cat_placeholders = ",".join("?" * len(cat_filter))
                 rows = conn.execute(f"""
-                    SELECT p.id, p.title, p.video_url, p.subreddit, p.upvotes
+                    SELECT p.id, p.title, p.video_url, p.subreddit, p.upvotes, p.media_type, p.category
                     FROM posts p
                     JOIN posts_fts fts ON p.rowid = fts.rowid
-                    WHERE posts_fts MATCH ? AND p.subreddit IN ({placeholders})
+                    WHERE posts_fts MATCH ? AND p.media_type = ? AND p.category IN ({cat_placeholders})
                     ORDER BY fts.rank
                     LIMIT ? OFFSET ?
-                """, (safe_query, *sub_filter, limit + 1, offset)).fetchall()
+                """, (safe_query, media_type, *cat_filter, limit + 1, offset)).fetchall()
             else:
                 rows = conn.execute("""
-                    SELECT p.id, p.title, p.video_url, p.subreddit, p.upvotes
+                    SELECT p.id, p.title, p.video_url, p.subreddit, p.upvotes, p.media_type, p.category
                     FROM posts p
                     JOIN posts_fts fts ON p.rowid = fts.rowid
-                    WHERE posts_fts MATCH ?
+                    WHERE posts_fts MATCH ? AND p.media_type = ?
                     ORDER BY fts.rank
                     LIMIT ? OFFSET ?
-                """, (safe_query, limit + 1, offset)).fetchall()
+                """, (safe_query, media_type, limit + 1, offset)).fetchall()
         else:
             seed_hash = hashlib.md5(seed.encode()).hexdigest()
             seed_a = int(seed_hash[:8], 16) | 1
             seed_b = int(seed_hash[8:16], 16)
 
-            if sub_filter:
-                placeholders = ",".join("?" * len(sub_filter))
+            if cat_filter:
+                cat_placeholders = ",".join("?" * len(cat_filter))
                 rows = conn.execute(f"""
-                    SELECT id, title, video_url, subreddit, upvotes
+                    SELECT id, title, video_url, subreddit, upvotes, media_type, category
                     FROM posts
-                    WHERE subreddit IN ({placeholders})
+                    WHERE media_type = ? AND category IN ({cat_placeholders})
                     ORDER BY (rowid * ? + ?) % 999983
                     LIMIT ? OFFSET ?
-                """, (*sub_filter, seed_a, seed_b, limit + 1, offset)).fetchall()
+                """, (media_type, *cat_filter, seed_a, seed_b, limit + 1, offset)).fetchall()
             else:
                 rows = conn.execute("""
-                    SELECT id, title, video_url, subreddit, upvotes
+                    SELECT id, title, video_url, subreddit, upvotes, media_type, category
                     FROM posts
+                    WHERE media_type = ?
                     ORDER BY (rowid * ? + ?) % 999983
                     LIMIT ? OFFSET ?
-                """, (seed_a, seed_b, limit + 1, offset)).fetchall()
+                """, (media_type, seed_a, seed_b, limit + 1, offset)).fetchall()
 
         has_more = len(rows) > limit
         videos = [dict(r) for r in rows[:limit]]
@@ -211,12 +231,16 @@ def api_stats():
     conn = get_db()
     try:
         total = conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
-        subs = conn.execute(
-            "SELECT DISTINCT subreddit FROM posts ORDER BY subreddit"
+        total_videos = conn.execute("SELECT COUNT(*) FROM posts WHERE media_type='video'").fetchone()[0]
+        total_images = conn.execute("SELECT COUNT(*) FROM posts WHERE media_type='image'").fetchone()[0]
+        cats = conn.execute(
+            "SELECT DISTINCT category FROM posts ORDER BY category"
         ).fetchall()
         return jsonify({
-            "total_videos": total,
-            "subreddits": [r[0] for r in subs],
+            "total_videos": total_videos,
+            "total_images": total_images,
+            "total": total,
+            "categories": [r[0] for r in cats],
         })
     finally:
         conn.close()

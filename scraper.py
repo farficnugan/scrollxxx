@@ -1,13 +1,12 @@
 """
-ScrollXXX Reddit Video Scraper
+ScrollXXX Reddit Video & Image Scraper
 
-Scrapes video posts from configured subreddits and stores them in the database.
+Scrapes video and image posts from configured subreddits and stores them in the database.
 
 Usage:
     python scraper.py                  # scrape once
     python scraper.py --loop           # scrape every 3 hours (run in background)
     python scraper.py --loop --interval 1  # scrape every 1 hour
-    python scraper.py funny memes      # scrape specific subreddits once
 """
 
 import os
@@ -20,14 +19,68 @@ import requests
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
-SUBREDDITS = [
-    "funny",
-    "cats",
-    "memes",
-    "dogs",
-    "animals",
-    "cute",
-]
+CATEGORIES = {
+    "Porn": [
+        "porn",
+        "bestporningalaxy",
+        "girlswatchingporn",
+        "stepsisters_porn",
+        "pornid",
+        "long_porn",
+        "porn_incest",
+        "porn_with_sounds",
+        "pornism",
+        "homemadeporntub",
+        "realhomeporn",
+        "toocuteforporn",
+    ],
+    "Goth/Emo": [
+        "gothsluts",
+        "gothwhoress",
+        "bigtiddygothgf",
+        "thickgothgirls",
+        "gothgirlsgw",
+        "emogirlsfuck",
+        "gothblowjobs",
+        "emogirlsfucking",
+    ],
+    "Latina": [
+        "Latinas",
+        "latinateensgonewild",
+        "latinchickswhitedicks",
+        "latinasbj",
+        "hotlatinaporn",
+    ],
+    "Ebony": [
+        "ebonyamateurs",
+        "ebony",
+        "ebonyqueenstakingdick",
+        "blackchickswhitedicks",
+        "bestebonyporn",
+        "ebonycumfaces",
+    ],
+    "White Girl": [
+        "thickwhitegirls",
+        "pawg",
+        "whitegirlsnsfw",
+    ],
+    "Indian": [
+        "indianporn_nsfw",
+        "indiangoddess",
+        "brownhotties",
+        "indianinstabaddies",
+        "brownchickswhitedicks",
+        "indiansgonewild",
+    ],
+}
+
+# Build a flat lookup: subreddit_name (lowercase) -> category
+SUB_TO_CATEGORY = {}
+ALL_SUBREDDITS = []
+for cat, subs in CATEGORIES.items():
+    for sub in subs:
+        SUB_TO_CATEGORY[sub.lower()] = cat
+        ALL_SUBREDDITS.append(sub)
 
 # Each entry is (sort, time_filter_or_None, pages_to_fetch)
 SCRAPE_MODES = [
@@ -45,8 +98,10 @@ DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 DB_PATH = os.path.join(DB_DIR, "scrollxxx.db")
 
 HEADERS = {
-    "User-Agent": "ScrollXXX-Scraper/1.0 (educational project)",
+    "User-Agent": "ScrollXXX-Scraper/2.0",
 }
+
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp")
 
 
 # ── Database ─────────────────────────────────────────────────────────────────
@@ -64,11 +119,24 @@ def get_db():
             subreddit   TEXT NOT NULL,
             upvotes     INTEGER DEFAULT 0,
             created_utc TIMESTAMP,
-            scraped_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            scraped_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            media_type  TEXT DEFAULT 'video',
+            category    TEXT DEFAULT 'Porn'
         );
         CREATE INDEX IF NOT EXISTS idx_posts_subreddit ON posts(subreddit);
         CREATE INDEX IF NOT EXISTS idx_posts_upvotes ON posts(upvotes);
+        CREATE INDEX IF NOT EXISTS idx_posts_media_type ON posts(media_type);
+        CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
     """)
+
+    # Migration: add columns if they don't exist (for existing databases)
+    columns = [row[1] for row in conn.execute("PRAGMA table_info(posts)").fetchall()]
+    if "media_type" not in columns:
+        conn.execute("ALTER TABLE posts ADD COLUMN media_type TEXT DEFAULT 'video'")
+    if "category" not in columns:
+        conn.execute("ALTER TABLE posts ADD COLUMN category TEXT DEFAULT 'Porn'")
+    conn.commit()
+
     # FTS5 table for search
     row = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='posts_fts'"
@@ -100,8 +168,8 @@ def get_db():
 def insert_post(conn, post):
     """Insert a post, ignoring duplicates (ON CONFLICT DO NOTHING)."""
     conn.execute("""
-        INSERT OR IGNORE INTO posts (id, title, video_url, subreddit, upvotes, created_utc, scraped_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO posts (id, title, video_url, subreddit, upvotes, created_utc, scraped_at, media_type, category)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         post["id"],
         post["title"],
@@ -110,14 +178,16 @@ def insert_post(conn, post):
         post["upvotes"],
         post["created_utc"],
         datetime.now(timezone.utc).isoformat(),
+        post["media_type"],
+        post["category"],
     ))
 
 
 # ── Reddit Scraping ─────────────────────────────────────────────────────────
 
-def scrape_subreddit(subreddit, sort="hot", time_filter=None, limit=POSTS_PER_REQUEST, pages=3):
-    """Scrape video posts from a subreddit."""
-    videos = []
+def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=POSTS_PER_REQUEST, pages=3):
+    """Scrape video and image posts from a subreddit."""
+    posts = []
     after = None
 
     for page in range(pages):
@@ -144,29 +214,82 @@ def scrape_subreddit(subreddit, sort="hot", time_filter=None, limit=POSTS_PER_RE
 
         for child in children:
             post = child.get("data", {})
-            if not post.get("is_video"):
-                continue
-            reddit_video = (post.get("media") or {}).get("reddit_video")
-            if not reddit_video:
-                continue
-
-            fallback = reddit_video.get("fallback_url", "")
-            if not fallback:
-                continue
-
-            video_url = fallback.split("?")[0]
             created = datetime.fromtimestamp(
                 post.get("created_utc", 0), tz=timezone.utc
             ).isoformat()
 
-            videos.append({
-                "id": post["id"],
-                "title": post.get("title", ""),
-                "video_url": video_url,
-                "subreddit": subreddit,
-                "upvotes": post.get("ups", 0),
-                "created_utc": created,
-            })
+            # Check for video posts
+            if post.get("is_video"):
+                reddit_video = (post.get("media") or {}).get("reddit_video")
+                if reddit_video:
+                    fallback = reddit_video.get("fallback_url", "")
+                    if fallback:
+                        video_url = fallback.split("?")[0]
+                        posts.append({
+                            "id": post["id"],
+                            "title": post.get("title", ""),
+                            "video_url": video_url,
+                            "subreddit": subreddit,
+                            "upvotes": post.get("ups", 0),
+                            "created_utc": created,
+                            "media_type": "video",
+                            "category": category,
+                        })
+                continue
+
+            # Check for image posts
+            post_url = post.get("url", "")
+            post_url_lower = post_url.lower()
+
+            # Direct image link
+            if any(post_url_lower.endswith(ext) for ext in IMAGE_EXTENSIONS):
+                posts.append({
+                    "id": post["id"],
+                    "title": post.get("title", ""),
+                    "video_url": post_url,  # reusing field name for simplicity
+                    "subreddit": subreddit,
+                    "upvotes": post.get("ups", 0),
+                    "created_utc": created,
+                    "media_type": "image",
+                    "category": category,
+                })
+                continue
+
+            # Reddit-hosted images (i.redd.it)
+            if "i.redd.it" in post_url:
+                posts.append({
+                    "id": post["id"],
+                    "title": post.get("title", ""),
+                    "video_url": post_url,
+                    "subreddit": subreddit,
+                    "upvotes": post.get("ups", 0),
+                    "created_utc": created,
+                    "media_type": "image",
+                    "category": category,
+                })
+                continue
+
+            # Reddit gallery — grab the first image preview
+            if post.get("is_gallery"):
+                media_metadata = post.get("media_metadata") or {}
+                for key, meta in media_metadata.items():
+                    if meta.get("status") == "valid" and meta.get("m", "").startswith("image/"):
+                        # Use the source URL from metadata
+                        source = (meta.get("s") or {}).get("u", "")
+                        if source:
+                            # Reddit escapes URLs in metadata
+                            source = source.replace("&amp;", "&")
+                            posts.append({
+                                "id": post["id"] + "_" + key,
+                                "title": post.get("title", ""),
+                                "video_url": source,
+                                "subreddit": subreddit,
+                                "upvotes": post.get("ups", 0),
+                                "created_utc": created,
+                                "media_type": "image",
+                                "category": category,
+                            })
+                            break  # Just grab first image from gallery
 
         if not after:
             break
@@ -174,51 +297,55 @@ def scrape_subreddit(subreddit, sort="hot", time_filter=None, limit=POSTS_PER_RE
         # Be polite to Reddit's servers
         time.sleep(1.5)
 
-    return videos
+    return posts
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    # Allow overriding subreddits via CLI args
-    subs = sys.argv[1:] if len(sys.argv) > 1 else SUBREDDITS
-
     conn = get_db()
     total_new = 0
 
-    for sub in subs:
+    for category, subs in CATEGORIES.items():
         print(f"\n{'='*50}")
-        print(f"Scraping r/{sub}")
+        print(f"Category: {category} ({len(subs)} subreddits)")
         print(f"{'='*50}")
 
-        sub_total = 0
-        for sort, tf, pages in SCRAPE_MODES:
-            label = f"{sort}/{tf}" if tf else sort
-            print(f"  [{label}] fetching...", end=" ", flush=True)
-            videos = scrape_subreddit(sub, sort=sort, time_filter=tf, pages=pages)
-            print(f"found {len(videos)} videos")
+        for sub in subs:
+            print(f"\n  Scraping r/{sub}")
+            sub_total = 0
+            for sort, tf, pages in SCRAPE_MODES:
+                label = f"{sort}/{tf}" if tf else sort
+                print(f"    [{label}] fetching...", end=" ", flush=True)
+                posts = scrape_subreddit(sub, category, sort=sort, time_filter=tf, pages=pages)
+                vids = sum(1 for p in posts if p["media_type"] == "video")
+                imgs = sum(1 for p in posts if p["media_type"] == "image")
+                print(f"found {vids} videos, {imgs} images")
 
-            before = conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
-            for v in videos:
-                insert_post(conn, v)
-            conn.commit()
-            after_count = conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
+                before = conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
+                for p in posts:
+                    insert_post(conn, p)
+                conn.commit()
+                after_count = conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
 
-            new = after_count - before
-            sub_total += new
-            if new:
-                print(f"        +{new} new posts added")
+                new = after_count - before
+                sub_total += new
+                if new:
+                    print(f"           +{new} new posts added")
 
-            time.sleep(1)
+                time.sleep(1)
 
-        total_new += sub_total
-        print(f"  Total new from r/{sub}: {sub_total}")
+            total_new += sub_total
+            print(f"    Total new from r/{sub}: {sub_total}")
 
     total = conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
+    total_vids = conn.execute("SELECT COUNT(*) FROM posts WHERE media_type='video'").fetchone()[0]
+    total_imgs = conn.execute("SELECT COUNT(*) FROM posts WHERE media_type='image'").fetchone()[0]
     conn.close()
 
     print(f"\n{'='*50}")
-    print(f"Done! +{total_new} new videos added. {total} total in database.")
+    print(f"Done! +{total_new} new posts added.")
+    print(f"Total in database: {total} ({total_vids} videos, {total_imgs} images)")
     print(f"{'='*50}\n")
 
 
@@ -226,14 +353,9 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="ScrollXXX Reddit Scraper")
-    parser.add_argument("subreddits", nargs="*", help="Subreddits to scrape (default: config list)")
     parser.add_argument("--loop", action="store_true", help="Run continuously on a schedule")
     parser.add_argument("--interval", type=float, default=3, help="Hours between scrapes (default: 3)")
     args = parser.parse_args()
-
-    # Override sys.argv for main() compatibility
-    if args.subreddits:
-        sys.argv = [sys.argv[0]] + args.subreddits
 
     if args.loop:
         interval_sec = args.interval * 3600
