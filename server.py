@@ -1,14 +1,68 @@
 import os
+import time
 import sqlite3
 import hashlib
+from collections import defaultdict
 from datetime import datetime, timezone
+from functools import wraps
 from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__, static_folder="static")
 
+# Secret key for session security (generate a real one for production)
+app.secret_key = os.environ.get("SECRET_KEY", os.urandom(32))
+
 DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 DB_PATH = os.path.join(DB_DIR, "scrollxxx.db")
 
+
+# ── Security headers ────────────────────────────────────────────────────────
+
+@app.after_request
+def set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # Allow Reddit video CDN for video sources
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "media-src 'self' https://v.redd.it; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+    return response
+
+
+# ── Rate limiting (in-memory, per-IP) ───────────────────────────────────────
+
+_rate_store = defaultdict(list)
+RATE_LIMIT = 60        # requests per window
+RATE_WINDOW = 60       # seconds
+
+
+def rate_limit(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+        if ip:
+            ip = ip.split(",")[0].strip()
+        now = time.time()
+        # Clean old entries
+        _rate_store[ip] = [t for t in _rate_store[ip] if now - t < RATE_WINDOW]
+        if len(_rate_store[ip]) >= RATE_LIMIT:
+            return jsonify({"error": "Rate limit exceeded. Try again later."}), 429
+        _rate_store[ip].append(now)
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ── Database ────────────────────────────────────────────────────────────────
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -37,7 +91,6 @@ def init_db():
     """)
 
     # FTS5 virtual table for fast title search
-    # Check if it exists first (CREATE IF NOT EXISTS doesn't work for virtual tables)
     row = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='posts_fts'"
     ).fetchone()
@@ -49,7 +102,6 @@ def init_db():
                 content_rowid='rowid'
             )
         """)
-        # Triggers to keep FTS index in sync with posts table
         conn.executescript("""
             CREATE TRIGGER IF NOT EXISTS posts_ai AFTER INSERT ON posts BEGIN
                 INSERT INTO posts_fts(rowid, title) VALUES (new.rowid, new.title);
@@ -77,20 +129,24 @@ def index():
 
 
 @app.route("/api/videos")
+@rate_limit
 def api_videos():
     page = max(1, request.args.get("page", 1, type=int))
     limit = min(50, max(1, request.args.get("limit", 20, type=int)))
-    query = request.args.get("q", "").strip()
+    query = request.args.get("q", "").strip()[:200]  # Cap query length
     subs_param = request.args.get("subs", "").strip()
-    # Seed for randomization — same seed = same order (stable pagination)
-    # Different seed = different shuffle (new visit = new order)
-    seed = request.args.get("seed", "0", type=str)
+    seed = request.args.get("seed", "0", type=str)[:50]  # Cap seed length
     offset = (page - 1) * limit
 
-    # Parse subreddit filter (comma-separated, alphanumeric only)
+    # Cap max offset to prevent deep pagination abuse
+    if offset > 5000:
+        return jsonify({"videos": [], "page": page, "has_more": False})
+
+    # Parse subreddit filter (comma-separated, alphanumeric only, max 20)
     sub_filter = []
     if subs_param:
-        sub_filter = [s.strip().lower() for s in subs_param.split(",") if s.strip().isalnum()]
+        sub_filter = [s.strip().lower() for s in subs_param.split(",")
+                      if s.strip().isalnum()][:20]
 
     conn = get_db()
     try:
@@ -121,11 +177,8 @@ def api_videos():
                     LIMIT ? OFFSET ?
                 """, (safe_query, limit + 1, offset)).fetchall()
         else:
-            # Seeded shuffle using rowid (unique per row) for true randomization.
-            # (rowid * A + B) % P gives a deterministic permutation per seed.
-            # Same seed = stable pagination. New seed = completely different order.
             seed_hash = hashlib.md5(seed.encode()).hexdigest()
-            seed_a = int(seed_hash[:8], 16) | 1  # ensure odd (coprime with P)
+            seed_a = int(seed_hash[:8], 16) | 1
             seed_b = int(seed_hash[8:16], 16)
 
             if sub_filter:
@@ -153,6 +206,7 @@ def api_videos():
 
 
 @app.route("/api/stats")
+@rate_limit
 def api_stats():
     conn = get_db()
     try:
@@ -173,5 +227,7 @@ def api_stats():
 init_db()
 
 if __name__ == "__main__":
-    print("ScrollXXX server running at http://localhost:5000")
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    print(f"ScrollXXX server running at http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=debug)

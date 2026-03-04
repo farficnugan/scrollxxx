@@ -77,6 +77,10 @@ html, body {
   flex-shrink: 0;
   position: relative;
 }
+/* On mobile, use full width — phones are already ~9:16 */
+@media (max-width: 759px) {
+  #feed-wrapper { width: 100vw; }
+}
 
 /* ── Logo ──────────────────────────────────────────────────── */
 #logo {
@@ -695,6 +699,60 @@ html, body {
   font-size: 11px;
   color: rgba(255,255,255,0.25);
 }
+
+/* ── Mobile-specific fixes ───────────────────────────────── */
+@media (max-width: 759px) {
+  /* Larger touch targets on mobile */
+  #filter-btn, #search-btn {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+  #search-btn { padding: 0 12px; }
+  #search-btn span { display: none; }  /* Hide "Search" label — icon only */
+
+  .sound-btn {
+    width: 46px;
+    height: 46px;
+    bottom: 80px;
+  }
+
+  /* More padding on title for bottom nav bars */
+  .card .title {
+    padding: 14px 14px 32px;
+  }
+
+  /* Prevent iOS rubber-band overscroll */
+  html, body { overscroll-behavior: none; }
+  #feed { overscroll-behavior: contain; }
+
+  /* Filter panel wider on small screens */
+  #filter-panel { width: 260px; }
+
+  /* Sub tag — better spacing under logo on narrow screens */
+  .card .sub-tag {
+    top: 60px;
+    right: 10px;
+  }
+
+  /* Age gate — better sizing on small screens */
+  .age-box { padding: 30px 20px; }
+  .age-box .age-logo { font-size: 36px; }
+}
+
+/* Prevent pull-to-refresh on mobile */
+body { overscroll-behavior-y: contain; }
+
+/* Safe area insets for notched phones */
+@supports (padding-top: env(safe-area-inset-top)) {
+  #logo, #search-btn, #filter-btn {
+    top: calc(16px + env(safe-area-inset-top));
+  }
+  .card .title {
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
+  }
+}
 </style>
 </head>
 <body>
@@ -764,11 +822,11 @@ html, body {
       <h3>12. Governing Law</h3>
       <p>These Terms shall be governed by and construed in accordance with applicable laws. Any disputes arising from these Terms or your use of the Website shall be resolved through binding arbitration.</p>
 
-      <h3>13. Legal</h3>
-      <p>You cannot press charges on us for anything once you access the site and if you decide to sue for any money you actually OWE US that money you sue for thanks</p>
+      <h3>13. Severability</h3>
+      <p>If any provision of these Terms is found to be unenforceable or invalid, that provision shall be limited or eliminated to the minimum extent necessary so that these Terms shall otherwise remain in full force and effect.</p>
 
-      <h3>14. Bininding Arbirtation</h3>
-      <p>All these terms are legally binding for the lifetime of the person that accepts them if you dont agree you have to pay us monthly retribution of 10% of your households median income.</p>
+      <h3>14. Contact</h3>
+      <p>For any questions regarding these Terms, content removal requests, or other inquiries, please contact us through the channels provided on the Website.</p>
 
       <p style="margin-top: 20px; color: rgba(255,255,255,0.2);">Last updated: March 2026</p>
     </div>
@@ -1085,6 +1143,17 @@ function buildCard(v) {
       audio.currentTime = video.currentTime;
       audio.play().catch(() => {});
       soundBtn.classList.remove('muted');
+    }
+  });
+
+  // Tap to play/pause (mobile UX)
+  video.addEventListener('click', () => {
+    if (video.paused) {
+      video.play().catch(() => {});
+      if (audioReady && audio.volume > 0) audio.play().catch(() => {});
+    } else {
+      video.pause();
+      if (audioReady) audio.pause();
     }
   });
 
