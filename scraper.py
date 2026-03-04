@@ -102,6 +102,52 @@ HEADERS = {
 }
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp")
+VIDEO_DOMAINS = ("redgifs.com", "v.redd.it")
+
+# Redgifs API token (fetched once per session)
+_redgifs_token = None
+
+
+def get_redgifs_token():
+    """Get a temporary auth token from Redgifs API."""
+    global _redgifs_token
+    if _redgifs_token:
+        return _redgifs_token
+    try:
+        resp = requests.get("https://api.redgifs.com/v2/auth/temporary", timeout=10)
+        resp.raise_for_status()
+        _redgifs_token = resp.json().get("token")
+        return _redgifs_token
+    except Exception as e:
+        print(f"  [!] Failed to get Redgifs token: {e}")
+        return None
+
+
+def resolve_redgifs_url(url):
+    """Resolve a redgifs.com link to a direct video URL via their API."""
+    # Extract the GIF ID from URLs like https://redgifs.com/watch/someid
+    # or https://www.redgifs.com/watch/someid
+    parts = url.rstrip("/").split("/")
+    gif_id = parts[-1].split("?")[0].split("#")[0]
+    if not gif_id:
+        return None
+
+    token = get_redgifs_token()
+    if not token:
+        return None
+
+    try:
+        resp = requests.get(
+            f"https://api.redgifs.com/v2/gifs/{gif_id.lower()}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        urls = resp.json().get("gif", {}).get("urls", {})
+        # Prefer HD, fall back to SD
+        return urls.get("hd") or urls.get("sd")
+    except Exception:
+        return None
 
 
 # ── Database ─────────────────────────────────────────────────────────────────
@@ -218,7 +264,10 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                 post.get("created_utc", 0), tz=timezone.utc
             ).isoformat()
 
-            # Check for video posts
+            post_url = post.get("url", "")
+            post_url_lower = post_url.lower()
+
+            # ── VIDEO: Reddit native (v.redd.it) ──
             if post.get("is_video"):
                 reddit_video = (post.get("media") or {}).get("reddit_video")
                 if reddit_video:
@@ -237,16 +286,61 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                         })
                 continue
 
-            # Check for image posts
-            post_url = post.get("url", "")
-            post_url_lower = post_url.lower()
+            # ── VIDEO: Redgifs links ──
+            if "redgifs.com" in post_url_lower:
+                video_url = resolve_redgifs_url(post_url)
+                if video_url:
+                    posts.append({
+                        "id": post["id"],
+                        "title": post.get("title", ""),
+                        "video_url": video_url,
+                        "subreddit": subreddit,
+                        "upvotes": post.get("ups", 0),
+                        "created_utc": created,
+                        "media_type": "video",
+                        "category": category,
+                    })
+                continue
 
-            # Direct image link
+            # ── VIDEO: Direct .mp4/.webm links (e.g. from Imgur) ──
+            if post_url_lower.endswith(".mp4") or post_url_lower.endswith(".webm"):
+                posts.append({
+                    "id": post["id"],
+                    "title": post.get("title", ""),
+                    "video_url": post_url,
+                    "subreddit": subreddit,
+                    "upvotes": post.get("ups", 0),
+                    "created_utc": created,
+                    "media_type": "video",
+                    "category": category,
+                })
+                continue
+
+            # ── VIDEO: Embedded media from other sources (gfycat, etc.) ──
+            preview = post.get("preview") or {}
+            reddit_video_preview = preview.get("reddit_video_preview")
+            if reddit_video_preview:
+                fallback = reddit_video_preview.get("fallback_url", "")
+                if fallback:
+                    video_url = fallback.split("?")[0]
+                    posts.append({
+                        "id": post["id"],
+                        "title": post.get("title", ""),
+                        "video_url": video_url,
+                        "subreddit": subreddit,
+                        "upvotes": post.get("ups", 0),
+                        "created_utc": created,
+                        "media_type": "video",
+                        "category": category,
+                    })
+                    continue
+
+            # ── IMAGE: Direct image link ──
             if any(post_url_lower.endswith(ext) for ext in IMAGE_EXTENSIONS):
                 posts.append({
                     "id": post["id"],
                     "title": post.get("title", ""),
-                    "video_url": post_url,  # reusing field name for simplicity
+                    "video_url": post_url,
                     "subreddit": subreddit,
                     "upvotes": post.get("ups", 0),
                     "created_utc": created,
@@ -255,7 +349,7 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                 })
                 continue
 
-            # Reddit-hosted images (i.redd.it)
+            # ── IMAGE: Reddit-hosted (i.redd.it) ──
             if "i.redd.it" in post_url:
                 posts.append({
                     "id": post["id"],
@@ -269,15 +363,13 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                 })
                 continue
 
-            # Reddit gallery — grab the first image preview
+            # ── IMAGE: Reddit gallery — grab first image ──
             if post.get("is_gallery"):
                 media_metadata = post.get("media_metadata") or {}
                 for key, meta in media_metadata.items():
                     if meta.get("status") == "valid" and meta.get("m", "").startswith("image/"):
-                        # Use the source URL from metadata
                         source = (meta.get("s") or {}).get("u", "")
                         if source:
-                            # Reddit escapes URLs in metadata
                             source = source.replace("&amp;", "&")
                             posts.append({
                                 "id": post["id"] + "_" + key,
@@ -289,7 +381,7 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                                 "media_type": "image",
                                 "category": category,
                             })
-                            break  # Just grab first image from gallery
+                            break
 
         if not after:
             break

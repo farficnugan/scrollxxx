@@ -28,7 +28,7 @@ def set_security_headers(response):
         "script-src 'self' 'unsafe-inline' *.adsterra.com *.adsterratech.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
-        "media-src 'self' https://v.redd.it; "
+        "media-src 'self' https://v.redd.it https://*.redgifs.com; "
         "img-src 'self' data: https://i.redd.it https://preview.redd.it https://external-preview.redd.it; "
         "connect-src 'self' *.adsterra.com *.adsterratech.com; "
         "frame-src *.adsterra.com *.adsterratech.com; "
