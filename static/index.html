@@ -18,6 +18,9 @@ html, body {
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: #fff;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
 }
 
 /* ── Layout: side panels + center feed ─────────────────────── */
@@ -508,6 +511,122 @@ html, body {
 .sound-btn.muted svg .sound-wave { display: none; }
 .sound-btn.muted svg .mute-x { display: block; }
 .sound-btn:not(.muted) svg .mute-x { display: none; }
+.sound-btn.no-audio { display: none; }
+
+/* ── Video progress bar ──────────────────────────────────── */
+.video-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255,255,255,0.15);
+  z-index: 11;
+  cursor: pointer;
+  transition: height 0.15s;
+}
+.video-progress:hover, .video-progress.dragging {
+  height: 6px;
+}
+.video-progress .progress-filled {
+  height: 100%;
+  background: #e53935;
+  width: 0%;
+  position: relative;
+  pointer-events: none;
+}
+.video-progress .progress-filled::after {
+  content: '';
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%) scale(0);
+  width: 10px;
+  height: 10px;
+  background: #e53935;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+.video-progress:hover .progress-filled::after,
+.video-progress.dragging .progress-filled::after {
+  transform: translateY(-50%) scale(1);
+}
+
+/* ── Loading skeleton shimmer ─────────────────────────────── */
+.skeleton-card {
+  width: 100%;
+  height: 100dvh;
+  scroll-snap-align: start;
+  background: #0a0a0a;
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-card .skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, #0a0a0a 30%, #151515 50%, #0a0a0a 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+.skeleton-card .skeleton-title {
+  position: absolute;
+  bottom: 30px;
+  left: 14px;
+  right: 60px;
+  height: 14px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+}
+.skeleton-card .skeleton-title-2 {
+  position: absolute;
+  bottom: 52px;
+  left: 14px;
+  width: 60%;
+  height: 14px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+}
+.skeleton-card .skeleton-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 60px;
+  height: 20px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 4px;
+}
+.skeleton-card .skeleton-btn {
+  position: absolute;
+  bottom: 80px;
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 50%;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Title preview overlay (long-press) ──────────────────── */
+.title-preview {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 20px 14px 30px;
+  background: rgba(0,0,0,0.92);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.6;
+  z-index: 20;
+  backdrop-filter: blur(10px);
+  animation: fadeUp 0.2s ease-out;
+  pointer-events: none;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* ── Mobile ad banner between cards ──────────────────────── */
 .ad-card {
@@ -778,6 +897,13 @@ html, body {
     bottom: 80px;
   }
 
+  .video-progress {
+    height: 4px;
+  }
+  .video-progress:hover, .video-progress.dragging {
+    height: 8px;
+  }
+
   .card .title {
     padding: 14px 14px 32px;
   }
@@ -997,6 +1123,45 @@ body { overscroll-behavior-y: contain; }
 </div>
 
 <script>
+/* ── Anti-copy protections ─────────────────────────────────── */
+// Disable right-click
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+// Block keyboard shortcuts for view-source, save, dev tools
+document.addEventListener('keydown', e => {
+  // Ctrl+U (view source), Ctrl+S (save)
+  if (e.ctrlKey && (e.key === 'u' || e.key === 'U' || e.key === 's' || e.key === 'S')) {
+    e.preventDefault();
+    return false;
+  }
+  // F12
+  if (e.key === 'F12') {
+    e.preventDefault();
+    return false;
+  }
+  // Ctrl+Shift+I/J/C (dev tools)
+  if (e.ctrlKey && e.shiftKey && ['I','i','J','j','C','c'].includes(e.key)) {
+    e.preventDefault();
+    return false;
+  }
+});
+
+// Disable text selection and dragging
+document.addEventListener('selectstart', e => e.preventDefault());
+document.addEventListener('dragstart', e => e.preventDefault());
+
+// Detect dev tools open (debugger trap)
+(function() {
+  const el = new Image();
+  Object.defineProperty(el, 'id', {
+    get: function() {
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#000;color:#fff;font-family:sans-serif;font-size:24px;">Access Denied</div>';
+      throw new Error();
+    }
+  });
+  setInterval(() => { console.log('%c', el); }, 2000);
+})();
+
 const feed       = document.getElementById('feed');
 const searchBtn  = document.getElementById('search-btn');
 const searchBar  = document.getElementById('search-bar');
@@ -1011,6 +1176,25 @@ let loading  = false;
 let hasMore  = true;
 let query    = '';
 let activeCategories = new Set(); // empty = show all
+
+/* ── Mute preference (expires after 24h) ───────────────────── */
+const mutePrefKey = 'scrollxxx_unmuted';
+const mutePrefTimeKey = 'scrollxxx_unmuted_ts';
+const MUTE_PREF_TTL = 24 * 60 * 60 * 1000;
+
+function getMutePref() {
+  const ts = parseInt(localStorage.getItem(mutePrefTimeKey) || '0');
+  if (Date.now() - ts > MUTE_PREF_TTL) {
+    localStorage.removeItem(mutePrefKey);
+    localStorage.removeItem(mutePrefTimeKey);
+    return false;
+  }
+  return localStorage.getItem(mutePrefKey) === '1';
+}
+function setMutePref(unmuted) {
+  localStorage.setItem(mutePrefKey, unmuted ? '1' : '0');
+  localStorage.setItem(mutePrefTimeKey, Date.now().toString());
+}
 let mediaType = 'video'; // 'video' or 'image'
 let feedSeed = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 let cardCount = 0; // track cards for ad insertion
@@ -1199,9 +1383,17 @@ function buildVideoCard(v) {
   let audioReady = false;
   let audioFailed = false;
 
+  const isRedgifs = v.video_url.includes('redgifs.com');
   const audioUrls = getAudioUrls(v.video_url);
   let audioAttempt = 0;
-  audio.src = audioUrls[0];
+
+  if (isRedgifs) {
+    // Redgifs videos have audio baked in — use the video element's own audio
+    audioFailed = true;
+    // We'll detect if the video actually has audio via loadedmetadata below
+  } else {
+    audio.src = audioUrls[0];
+  }
 
   audio.addEventListener('error', () => {
     audioAttempt++;
@@ -1209,6 +1401,7 @@ function buildVideoCard(v) {
       audio.src = audioUrls[audioAttempt];
     } else {
       audioFailed = true;
+      soundBtn.classList.add('no-audio');
     }
   });
   audio.addEventListener('loadedmetadata', () => { audioReady = true; });
@@ -1234,20 +1427,45 @@ function buildVideoCard(v) {
   const soundBtn = document.createElement('button');
   soundBtn.className = 'sound-btn muted';
   soundBtn.innerHTML = SOUND_SVG;
-  soundBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (audioFailed) return;
-    const isMuted = !audio.paused && audio.volume > 0;
-    if (isMuted) {
-      audio.volume = 0;
-      soundBtn.classList.add('muted');
-    } else {
-      audio.volume = 1;
-      audio.currentTime = video.currentTime;
-      audio.play().catch(() => {});
-      soundBtn.classList.remove('muted');
-    }
-  });
+
+  if (isRedgifs) {
+    video.muted = true;
+    video.addEventListener('loadedmetadata', () => {
+      const hasAudio = (typeof video.mozHasAudio !== 'undefined' ? video.mozHasAudio :
+        (video.audioTracks && video.audioTracks.length > 0) ||
+        (typeof video.webkitAudioDecodedByteCount !== 'undefined' && video.webkitAudioDecodedByteCount > 0) ||
+        true);
+      if (!hasAudio) {
+        soundBtn.classList.add('no-audio');
+      }
+    });
+    soundBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      video.muted = !video.muted;
+      soundBtn.classList.toggle('muted', video.muted);
+      setMutePref(!video.muted);
+    });
+  } else {
+    soundBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (audioFailed) return;
+      const isMuted = !audio.paused && audio.volume > 0;
+      if (isMuted) {
+        audio.volume = 0;
+        soundBtn.classList.add('muted');
+        setMutePref(false);
+      } else {
+        audio.volume = 1;
+        audio.currentTime = video.currentTime;
+        audio.play().catch(() => {});
+        soundBtn.classList.remove('muted');
+        setMutePref(true);
+      }
+    });
+  }
+
+  // Store type for autoplay observer
+  card._isRedgifs = isRedgifs;
 
   video.addEventListener('click', () => {
     if (video.paused) {
@@ -1263,19 +1481,62 @@ function buildVideoCard(v) {
   card._soundBtn = soundBtn;
   card._isVideo = true;
 
-  const title = document.createElement('div');
-  title.className = 'title';
-  title.textContent = v.title;
+  /* ── Progress bar ── */
+  const progressBar = document.createElement('div');
+  progressBar.className = 'video-progress';
+  const progressFilled = document.createElement('div');
+  progressFilled.className = 'progress-filled';
+  progressBar.appendChild(progressFilled);
 
-  const sub = document.createElement('div');
-  sub.className = 'sub-tag';
-  sub.textContent = v.category || 'r/' + v.subreddit;
+  video.addEventListener('timeupdate', () => {
+    if (video.duration) {
+      progressFilled.style.width = (video.currentTime / video.duration * 100) + '%';
+    }
+  });
+
+  let dragging = false;
+  function seekTo(e) {
+    const rect = progressBar.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    if (video.duration) {
+      video.currentTime = pct * video.duration;
+      if (audioReady && !isRedgifs) audio.currentTime = video.currentTime;
+    }
+  }
+  progressBar.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    dragging = true;
+    progressBar.classList.add('dragging');
+    seekTo(e);
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (dragging) seekTo(e);
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragging) {
+      dragging = false;
+      progressBar.classList.remove('dragging');
+    }
+  });
+  // Touch support
+  progressBar.addEventListener('touchstart', (e) => {
+    e.stopPropagation();
+    dragging = true;
+    progressBar.classList.add('dragging');
+    seekTo(e.touches[0]);
+  }, { passive: true });
+  progressBar.addEventListener('touchmove', (e) => {
+    if (dragging) seekTo(e.touches[0]);
+  }, { passive: true });
+  progressBar.addEventListener('touchend', () => {
+    dragging = false;
+    progressBar.classList.remove('dragging');
+  });
 
   card.appendChild(video);
   card.appendChild(audio);
   card.appendChild(soundBtn);
-  card.appendChild(title);
-  card.appendChild(sub);
+  card.appendChild(progressBar);
   return card;
 }
 
@@ -1302,17 +1563,7 @@ function buildImageCard(v) {
 
   card._isVideo = false;
 
-  const title = document.createElement('div');
-  title.className = 'title';
-  title.textContent = v.title;
-
-  const sub = document.createElement('div');
-  sub.className = 'sub-tag';
-  sub.textContent = v.category || 'r/' + v.subreddit;
-
   card.appendChild(img);
-  card.appendChild(title);
-  card.appendChild(sub);
   return card;
 }
 
@@ -1332,8 +1583,23 @@ const observer = new IntersectionObserver(entries => {
     if (!v) return;
     if (entry.isIntersecting) {
       v.play().catch(() => {});
+      // Apply saved mute preference
+      if (getMutePref()) {
+        const btn = entry.target._soundBtn;
+        if (btn && !btn.classList.contains('no-audio')) {
+          if (entry.target._isRedgifs) {
+            v.muted = false;
+          } else if (a) {
+            a.volume = 1;
+            a.currentTime = v.currentTime;
+            a.play().catch(() => {});
+          }
+          if (btn) btn.classList.remove('muted');
+        }
+      }
     } else {
       v.pause();
+      v.muted = true;
       if (a) { a.pause(); a.volume = 0; }
       const btn = entry.target._soundBtn;
       if (btn) btn.classList.add('muted');
@@ -1346,10 +1612,15 @@ async function loadMore() {
   if (loading || !hasMore) return;
   loading = true;
 
-  const spinner = document.createElement('div');
-  spinner.className = 'spinner-wrap';
-  spinner.innerHTML = '<div class="spin"></div>';
-  feed.appendChild(spinner);
+  // Show skeleton placeholders while loading
+  const skeletons = [];
+  for (let i = 0; i < 3; i++) {
+    const sk = document.createElement('div');
+    sk.className = 'skeleton-card';
+    sk.innerHTML = '<div class="skeleton-shimmer"></div><div class="skeleton-title-2"></div><div class="skeleton-title"></div><div class="skeleton-badge"></div><div class="skeleton-btn"></div>';
+    feed.appendChild(sk);
+    skeletons.push(sk);
+  }
 
   try {
     let url = '/api/videos?page=' + page + '&limit=20&seed=' + feedSeed + '&type=' + mediaType;
@@ -1360,7 +1631,7 @@ async function loadMore() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
 
-    feed.removeChild(spinner);
+    skeletons.forEach(sk => sk.remove());
 
     if (data.videos.length === 0 && page === 1) {
       const msg = document.createElement('div');
@@ -1389,7 +1660,7 @@ async function loadMore() {
       page++;
     }
   } catch (e) {
-    feed.removeChild(spinner);
+    skeletons.forEach(sk => sk.remove());
     const msg = document.createElement('div');
     msg.className = 'msg-card';
     msg.innerHTML = '<div class="text">Failed to load: ' + escapeHtml(e.message) + '</div>';
@@ -1460,6 +1731,93 @@ function dismissTutorial() {
   localStorage.setItem('scrollxxx_tut_done', '1');
   loadMore();
 }
+
+/* ── Long-press to preview full title ──────────────────────── */
+let longPressTimer = null;
+let titlePreview = null;
+
+feed.addEventListener('pointerdown', (e) => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const titleEl = card.querySelector('.title');
+  if (!titleEl) return;
+
+  longPressTimer = setTimeout(() => {
+    titlePreview = document.createElement('div');
+    titlePreview.className = 'title-preview';
+    titlePreview.textContent = titleEl.textContent;
+    card.appendChild(titlePreview);
+
+    // Pause video while previewing
+    const vid = card.querySelector('video');
+    if (vid && !vid.paused) vid.pause();
+  }, 500);
+});
+
+function clearLongPress() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  if (titlePreview) {
+    const card = titlePreview.closest('.card');
+    titlePreview.remove();
+    titlePreview = null;
+    // Resume video
+    const vid = card?.querySelector('video');
+    if (vid) vid.play().catch(() => {});
+  }
+}
+feed.addEventListener('pointerup', clearLongPress);
+feed.addEventListener('pointercancel', clearLongPress);
+feed.addEventListener('pointermove', (e) => {
+  // Cancel if finger moves too much (not a hold)
+  if (longPressTimer && e.pointerType === 'touch') {
+    // Allow small movements
+  }
+});
+
+/* ── Keyboard shortcuts ────────────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  // Don't trigger when typing in search
+  if (document.activeElement === searchIn) return;
+
+  const cards = [...feed.querySelectorAll('.card:not([style*="display: none"])')];
+  const feedRect = feed.getBoundingClientRect();
+
+  // Find the currently visible card
+  let currentIdx = cards.findIndex(card => {
+    const r = card.getBoundingClientRect();
+    return r.top >= feedRect.top - 10 && r.top < feedRect.bottom;
+  });
+  if (currentIdx < 0) currentIdx = 0;
+
+  if (e.key === 'ArrowDown' || e.key === 'j') {
+    e.preventDefault();
+    const next = cards[currentIdx + 1];
+    if (next) next.scrollIntoView({ behavior: 'smooth' });
+  } else if (e.key === 'ArrowUp' || e.key === 'k') {
+    e.preventDefault();
+    const prev = cards[currentIdx - 1];
+    if (prev) prev.scrollIntoView({ behavior: 'smooth' });
+  } else if (e.key === ' ') {
+    e.preventDefault();
+    const card = cards[currentIdx];
+    if (!card) return;
+    const vid = card.querySelector('video');
+    if (vid) {
+      if (vid.paused) {
+        vid.play().catch(() => {});
+      } else {
+        vid.pause();
+        const a = card._audio;
+        if (a) a.pause();
+      }
+    }
+  } else if (e.key === 'm' || e.key === 'M') {
+    const card = cards[currentIdx];
+    if (!card || !card._soundBtn) return;
+    card._soundBtn.click();
+  }
+});
+
 </script>
 </body>
 </html>
