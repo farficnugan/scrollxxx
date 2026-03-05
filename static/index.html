@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="referrer" content="no-referrer">
 <title>ScrollXXX</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1184,6 +1185,7 @@ function buildVideoCard(v) {
   card.className = 'card';
 
   const video = document.createElement('video');
+  video.referrerPolicy = 'no-referrer';
   video.src = v.video_url;
   video.loop = true;
   video.muted = true;
@@ -1191,6 +1193,7 @@ function buildVideoCard(v) {
   video.preload = 'metadata';
 
   const audio = document.createElement('audio');
+  audio.referrerPolicy = 'no-referrer';
   audio.preload = 'metadata';
   audio.loop = true;
   let audioReady = false;
@@ -1283,6 +1286,7 @@ function buildImageCard(v) {
 
   const img = document.createElement('img');
   img.className = 'card-img';
+  img.referrerPolicy = 'no-referrer';
   img.src = v.video_url;
   img.alt = v.title;
   img.loading = 'lazy';
