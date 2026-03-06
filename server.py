@@ -25,12 +25,12 @@ def set_security_headers(response):
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' *.adsterra.com *.adsterratech.com; "
+        "script-src 'self' 'unsafe-inline' *.googletagmanager.com *.google-analytics.com *.adsterra.com *.adsterratech.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "media-src *; "
         "img-src * data:; "
-        "connect-src 'self' *.adsterra.com *.adsterratech.com; "
+        "connect-src 'self' *.google-analytics.com *.analytics.google.com *.googletagmanager.com *.adsterra.com *.adsterratech.com; "
         "frame-src *.adsterra.com *.adsterratech.com; "
         "frame-ancestors 'none'"
     )
