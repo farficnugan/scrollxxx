@@ -4,7 +4,7 @@ import sqlite3
 import hashlib
 from collections import defaultdict
 from functools import wraps
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, redirect, Response
 
 app = Flask(__name__, static_folder="static")
 
@@ -142,6 +142,121 @@ def index():
 @app.route("/favicon.png")
 def favicon():
     return send_from_directory("static", "favicon.png")
+
+
+# ── SEO Category Landing Pages ──────────────────────────────────────────────
+
+CATEGORY_SEO = {
+    "Porn": {
+        "title": "Free Porn Videos",
+        "desc": "Watch the hottest free porn videos in an endless scroll feed. New content added daily from top sources.",
+        "keywords": "free porn, porn videos, watch porn online, best porn",
+    },
+    "Goth/Emo": {
+        "title": "Goth & Emo Girls",
+        "desc": "Goth girls, emo babes, and alt chicks. Scroll through the best goth and emo adult content for free.",
+        "keywords": "goth girls, emo porn, alt girls, goth sluts, big tiddy goth gf",
+    },
+    "Latina": {
+        "title": "Latina Porn Videos",
+        "desc": "Hot Latina videos and photos. The best Latina adult content in one endless scroll feed.",
+        "keywords": "latina porn, hot latinas, latina videos, latina girls",
+    },
+    "Ebony": {
+        "title": "Ebony Porn Videos",
+        "desc": "Beautiful ebony women in the hottest videos and photos. Scroll through the best ebony adult content.",
+        "keywords": "ebony porn, ebony videos, black girls, ebony amateur",
+    },
+    "White Girl": {
+        "title": "White Girl Videos",
+        "desc": "Thick white girls, PAWGs, and more. The best white girl adult content in an endless feed.",
+        "keywords": "white girls, pawg, thick white girls, white girl porn",
+    },
+    "Indian": {
+        "title": "Indian Porn Videos",
+        "desc": "Indian beauties and desi content. Scroll through the best Indian adult videos and photos.",
+        "keywords": "indian porn, desi porn, indian girls, brown hotties",
+    },
+}
+
+
+def build_landing_page(category, seo):
+    """Generate an SEO-optimized landing page that redirects to the main feed."""
+    cat_slug = category.lower().replace("/", "-").replace(" ", "-")
+    full_title = f"{seo['title']} - ScrollXXX"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<title>{full_title}</title>
+<meta name="description" content="{seo['desc']}">
+<meta name="keywords" content="{seo['keywords']}">
+<link rel="canonical" href="https://scrollxxx.vip/{cat_slug}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://scrollxxx.vip/{cat_slug}">
+<meta property="og:title" content="{full_title}">
+<meta property="og:description" content="{seo['desc']}">
+<meta property="og:site_name" content="ScrollXXX">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{full_title}">
+<meta name="twitter:description" content="{seo['desc']}">
+<link rel="icon" type="image/png" href="/favicon.png">
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-GWEV0G41KG"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){{dataLayer.push(arguments);}}
+  gtag('js', new Date());
+  gtag('config', 'G-GWEV0G41KG');
+</script>
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    background: #000; color: #fff; min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 40px 20px; text-align: center;
+  }}
+  h1 {{ font-size: 42px; margin-bottom: 16px; font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; }}
+  p {{ font-size: 16px; color: rgba(255,255,255,0.7); max-width: 500px; line-height: 1.6; margin-bottom: 30px; }}
+  .enter-btn {{
+    display: inline-block; padding: 14px 40px;
+    background: #e53935; color: #fff; text-decoration: none;
+    border-radius: 8px; font-size: 18px; font-weight: 600;
+    transition: background 0.2s;
+  }}
+  .enter-btn:hover {{ background: #c62828; }}
+  .cats {{ display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 40px; max-width: 600px; }}
+  .cats a {{
+    padding: 8px 16px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6);
+    text-decoration: none; border-radius: 6px; font-size: 13px; transition: background 0.2s;
+  }}
+  .cats a:hover {{ background: rgba(255,255,255,0.12); color: #fff; }}
+  .cats a.active {{ background: #e53935; color: #fff; }}
+</style>
+</head>
+<body>
+<h1>{seo['title']}</h1>
+<p>{seo['desc']}</p>
+<a href="/?category={category}" class="enter-btn">Watch Now</a>
+<nav class="cats">
+{"".join(f'<a href="/{c.lower().replace("/", "-").replace(" ", "-")}"' + (' class="active"' if c == category else '') + f'>{c}</a>' for c in CATEGORY_SEO)}
+</nav>
+</body>
+</html>"""
+
+
+@app.route("/<slug>")
+def category_landing(slug):
+    # Map slug back to category name
+    for cat in CATEGORY_SEO:
+        cat_slug = cat.lower().replace("/", "-").replace(" ", "-")
+        if slug == cat_slug:
+            html = build_landing_page(cat, CATEGORY_SEO[cat])
+            return Response(html, content_type="text/html")
+    # Not a category — 404
+    return "Not found", 404
 
 
 @app.route("/api/videos")
