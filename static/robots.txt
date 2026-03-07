@@ -2,4 +2,10 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
+User-agent: Googlebot
+Allow: /
+Allow: /discover
+Allow: /info
+Disallow: /api/
+
 Sitemap: https://scrollxxx.vip/sitemap.xml

@@ -21,8 +21,35 @@
 <meta name="twitter:title" content="ScrollXXX — Free Infinite Scroll Adult Videos & Photos">
 <meta name="twitter:description" content="Endlessly scroll through thousands of videos and photos. TikTok-style adult content, completely free.">
 
+<!-- SEO: Robots + Rating -->
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+<meta name="rating" content="adult">
+<meta name="googlebot" content="index, follow">
+
+<!-- Structured Data (JSON-LD) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "ScrollXXX",
+  "url": "https://scrollxxx.vip/",
+  "description": "Free TikTok-style adult content site. Endlessly scroll through thousands of videos and photos.",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "https://scrollxxx.vip/?q={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+}
+</script>
+
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://v.redd.it" crossorigin>
+<link rel="preconnect" href="https://preview.redd.it" crossorigin>
+<link rel="dns-prefetch" href="https://v.redd.it">
+<link rel="dns-prefetch" href="https://preview.redd.it">
+<link rel="dns-prefetch" href="https://i.redd.it">
+<link rel="dns-prefetch" href="https://thumbs.redgifs.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-GWEV0G41KG"></script>
@@ -368,6 +395,53 @@ html, body {
   stroke-linecap: round;
 }
 #filter-btn.has-filter svg { stroke: #ff2d6b; }
+
+#discover-btn {
+  position: fixed;
+  top: 16px;
+  left: 62px;
+  z-index: 101;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  border-radius: 17px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  backdrop-filter: blur(12px);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+}
+#discover-btn:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.2);
+}
+#discover-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: #fff;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+#info-link {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  z-index: 100;
+  color: rgba(255,255,255,0.2);
+  font-size: 11px;
+  text-decoration: none;
+  padding: 4px 8px;
+  transition: color 0.2s;
+}
+#info-link:hover { color: rgba(255,255,255,0.5); }
 
 /* ── Category filter panel ───────────────────────────────── */
 #filter-panel {
@@ -941,6 +1015,12 @@ html, body {
     min-width: 40px;
     min-height: 40px;
   }
+  #discover-btn {
+    left: 68px;
+    height: 40px;
+    font-size: 11px;
+    padding: 0 12px;
+  }
   #search-btn { padding: 0 12px; }
   #search-btn span { display: none; }
 
@@ -1129,6 +1209,11 @@ body { overscroll-behavior-y: contain; }
       <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
     </button>
 
+    <a href="/discover" id="discover-btn">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="12" x2="15" y2="14"/></svg>
+      Discover
+    </a>
+
     <!-- Logo (click to reset feed) -->
     <div id="logo">
       <span class="scroll">Scroll</span><span class="xxx">XXX</span>
@@ -1162,6 +1247,7 @@ body { overscroll-behavior-y: contain; }
 
     <div id="feed"></div>
   </div>
+  <a href="/info" id="info-link">Legal / Info</a>
 
   <!-- Right side panel (ad space) -->
   <div class="side-panel" id="panel-right">
@@ -1410,12 +1496,20 @@ function getAudioUrls(videoUrl) {
 function buildAdCard() {
   const ad = document.createElement('div');
   ad.className = 'ad-card';
+  const messages = [
+    '🔥 Share ScrollXXX with a friend',
+    '💜 scrollxxx.vip — Endless content, zero ads',
+    '🚀 ScrollXXX — Better than your last hookup',
+    '👀 You scrolling? Tell your homies about ScrollXXX',
+    '🔗 scrollxxx.vip — Bookmark it. Thank us later.',
+    '💦 ScrollXXX — New content every day',
+  ];
+  const msg = messages[Math.floor(Math.random() * messages.length)];
   ad.innerHTML = `
-    <div class="ad-container" id="ad-feed-${Date.now()}">
-      <!-- Adsterra: your ad code will render here -->
-      Ad Space
+    <div class="ad-container" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;padding:24px;text-align:center;">
+      <div style="font-size:1.4rem;font-weight:700;color:#fff;">${msg}</div>
+      <div style="font-size:0.85rem;color:rgba(255,255,255,0.5);">scrollxxx.vip</div>
     </div>
-    <div class="ad-label">Advertisement</div>
   `;
   return ad;
 }
@@ -1424,6 +1518,13 @@ function buildAdCard() {
 function buildVideoCard(v) {
   const card = document.createElement('div');
   card.className = 'card';
+
+  // Hidden SEO link for Google crawling
+  const seoLink = document.createElement('a');
+  seoLink.href = '/watch/' + v.id;
+  seoLink.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;';
+  seoLink.textContent = v.title;
+  card.appendChild(seoLink);
 
   const loader = document.createElement('div');
   loader.className = 'video-loader';
@@ -1435,6 +1536,7 @@ function buildVideoCard(v) {
   video.muted = true;
   video.playsInline = true;
   video.preload = 'metadata';
+  if (v.thumbnail) video.poster = v.thumbnail;
 
   // Hide loader once video can play
   video.addEventListener('canplay', () => {
@@ -1611,6 +1713,13 @@ function buildImageCard(v) {
   const card = document.createElement('div');
   card.className = 'card';
 
+  // Hidden SEO link for Google crawling
+  const seoLink = document.createElement('a');
+  seoLink.href = '/watch/' + v.id;
+  seoLink.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;';
+  seoLink.textContent = v.title;
+  card.appendChild(seoLink);
+
   const img = document.createElement('img');
   img.className = 'card-img';
   img.referrerPolicy = 'no-referrer';
@@ -1685,10 +1794,28 @@ const preloadObserver = new IntersectionObserver(entries => {
       const v = entry.target.querySelector('video');
       if (v && v.preload !== 'auto') {
         v.preload = 'auto';
+        v.load();
       }
+      preloadObserver.unobserve(entry.target);
     }
   });
-}, { rootMargin: '100% 0px' }); // triggers when card is one screen away
+}, { rootMargin: '500% 0px' }); // preload ~5 cards ahead
+
+/* ── Eagerly preload first N videos on page load ──────────── */
+function eagerPreload() {
+  const cards = document.querySelectorAll('.card');
+  let count = 0;
+  cards.forEach(card => {
+    if (count >= 5) return;
+    const v = card.querySelector('video');
+    if (v && v.preload !== 'auto') {
+      v.preload = 'auto';
+      v.fetchPriority = count < 2 ? 'high' : 'auto';
+      v.load();
+      count++;
+    }
+  });
+}
 
 /* ── Infinite scroll loader ────────────────────────────────── */
 async function loadMore() {
@@ -1751,6 +1878,8 @@ async function loadMore() {
     feed.appendChild(msg);
   }
   loading = false;
+  // Eagerly preload first 5 videos on initial load
+  if (page <= 2) eagerPreload();
 }
 
 function escapeHtml(str) {

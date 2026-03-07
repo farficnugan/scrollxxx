@@ -10,10 +10,11 @@ Usage:
 """
 
 import os
-import sys
 import time
 import sqlite3
+import threading
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
@@ -71,6 +72,93 @@ CATEGORIES = {
         "indianinstabaddies",
         "brownchickswhitedicks",
         "indiansgonewild",
+    ],
+    "Asian": [
+        "AsianCumsluts",
+        "AsiansGonewild",
+        "Asiangirlsforwhitemen",
+        "Asiangirlswhitecocks",
+        "rice_cakes",
+        "submissiveasiansluts",
+        "smallasian",
+        "juicyasians",
+    ],
+    "MILF": [
+        "milf",
+        "milfs_fucking",
+        "mommyheaven",
+        "maturemilf",
+        "sexiestmilfs",
+        "momnsfw",
+    ],
+    "Teen": [
+        "barelylegalteens",
+        "teencutiesnsfw",
+        "teengonehorny",
+        "teenzhub",
+    ],
+    "Amateur": [
+        "amateurporn",
+        "amateurcontent",
+        "homemadexxx",
+        "amateurporngw",
+    ],
+    "Anal": [
+        "teenanal",
+        "upherbutt",
+        "loveanal",
+        "analgonewild",
+        "anal",
+        "heavyanal",
+        "butsex",
+        "analdildogirls",
+    ],
+    "Lesbian": [
+        "lesbiangirlsporn",
+        "lesbians",
+        "amateurlesbianporn",
+    ],
+    "Big Tits": [
+        "trulybigtits",
+        "teenbigtitsnsfw",
+        "hugetitsandass",
+        "sexwithbigtits",
+    ],
+    "Big Ass": [
+        "bigbootyporn",
+        "bigasses",
+        "bigbuttamateurs",
+        "bigbootiesgonewild",
+        "break_yo_dick_thick",
+    ],
+    "Blowjob": [
+        "blowjobs",
+        "amateurblowjobss",
+        "slutmouth",
+        "blowjobaddict",
+        "blowjobgirls",
+        "blowjob",
+        "eliteblowjob",
+        "asianblowjob",
+    ],
+    "Creampie": [
+        "breeding_creampie",
+        "creampies",
+        "forgottopullout",
+        "dontpullout",
+        "breedmedaddy",
+        "creampie",
+        "creampie_porn",
+    ],
+    "Redhead": [
+        "redheads",
+        "redheadsporn",
+    ],
+    "Threesome": [
+        "3somesandmore",
+        "2chicks1dick",
+        "threesomesnsfw",
+        "ffm",
     ],
 }
 
@@ -181,6 +269,8 @@ def get_db():
         conn.execute("ALTER TABLE posts ADD COLUMN media_type TEXT DEFAULT 'video'")
     if "category" not in columns:
         conn.execute("ALTER TABLE posts ADD COLUMN category TEXT DEFAULT 'Porn'")
+    if "thumbnail" not in columns:
+        conn.execute("ALTER TABLE posts ADD COLUMN thumbnail TEXT DEFAULT ''")
     conn.commit()
 
     # FTS5 table for search
@@ -214,8 +304,8 @@ def get_db():
 def insert_post(conn, post):
     """Insert a post, ignoring duplicates (ON CONFLICT DO NOTHING)."""
     conn.execute("""
-        INSERT OR IGNORE INTO posts (id, title, video_url, subreddit, upvotes, created_utc, scraped_at, media_type, category)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO posts (id, title, video_url, subreddit, upvotes, created_utc, scraped_at, media_type, category, thumbnail)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         post["id"],
         post["title"],
@@ -226,6 +316,7 @@ def insert_post(conn, post):
         datetime.now(timezone.utc).isoformat(),
         post["media_type"],
         post["category"],
+        post.get("thumbnail", ""),
     ))
 
 
@@ -246,6 +337,11 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
 
         try:
             resp = requests.get(url, headers=HEADERS, params=params, timeout=15)
+            if resp.status_code == 429:
+                wait = int(resp.headers.get("Retry-After", 60))
+                print(f"  [!] Rate limited on r/{subreddit} — waiting {wait}s")
+                time.sleep(wait)
+                resp = requests.get(url, headers=HEADERS, params=params, timeout=15)
             resp.raise_for_status()
         except requests.RequestException as e:
             print(f"  [!] Request failed (page {page + 1}): {e}")
@@ -263,6 +359,21 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
             created = datetime.fromtimestamp(
                 post.get("created_utc", 0), tz=timezone.utc
             ).isoformat()
+
+            # Extract best thumbnail
+            thumb = ""
+            try:
+                images = (post.get("preview") or {}).get("images", [])
+                if images:
+                    source = images[0].get("source", {}).get("url", "")
+                    if source:
+                        thumb = source.replace("&amp;", "&")
+            except Exception:
+                pass
+            if not thumb:
+                t = post.get("thumbnail", "")
+                if t and t.startswith("http"):
+                    thumb = t
 
             post_url = post.get("url", "")
             post_url_lower = post_url.lower()
@@ -283,6 +394,7 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                             "created_utc": created,
                             "media_type": "video",
                             "category": category,
+                            "thumbnail": thumb,
                         })
                 continue
 
@@ -299,6 +411,7 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                         "created_utc": created,
                         "media_type": "video",
                         "category": category,
+                        "thumbnail": thumb,
                     })
                 continue
 
@@ -313,6 +426,7 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                     "created_utc": created,
                     "media_type": "video",
                     "category": category,
+                    "thumbnail": thumb,
                 })
                 continue
 
@@ -332,6 +446,7 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                         "created_utc": created,
                         "media_type": "video",
                         "category": category,
+                        "thumbnail": thumb,
                     })
                     continue
 
@@ -346,6 +461,7 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                     "created_utc": created,
                     "media_type": "image",
                     "category": category,
+                    "thumbnail": thumb,
                 })
                 continue
 
@@ -360,6 +476,7 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                     "created_utc": created,
                     "media_type": "image",
                     "category": category,
+                    "thumbnail": thumb,
                 })
                 continue
 
@@ -380,6 +497,7 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
                                 "created_utc": created,
                                 "media_type": "image",
                                 "category": category,
+                                "thumbnail": thumb,
                             })
                             break
 
@@ -387,48 +505,83 @@ def scrape_subreddit(subreddit, category, sort="hot", time_filter=None, limit=PO
             break
 
         # Be polite to Reddit's servers
-        time.sleep(1.5)
+        time.sleep(3)
 
     return posts
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
+MAX_WORKERS = 2  # 2 threads with longer delays to avoid rate limits
+
+_db_lock = threading.Lock()
+
+
+def scrape_one_sub(sub, category):
+    """Scrape all modes for a single subreddit. Returns list of posts."""
+    all_posts = []
+    for sort, tf, pages in SCRAPE_MODES:
+        label = f"{sort}/{tf}" if tf else sort
+        posts = scrape_subreddit(sub, category, sort=sort, time_filter=tf, pages=pages)
+        vids = sum(1 for p in posts if p["media_type"] == "video")
+        imgs = sum(1 for p in posts if p["media_type"] == "image")
+        print(f"  r/{sub} [{label}] → {vids} videos, {imgs} images", flush=True)
+        all_posts.extend(posts)
+        time.sleep(3)  # delay between modes to avoid rate limits
+    return all_posts
+
+
 def main():
     conn = get_db()
     total_new = 0
 
+    # Build flat list of (sub, category) pairs
+    tasks = []
     for category, subs in CATEGORIES.items():
-        print(f"\n{'='*50}")
-        print(f"Category: {category} ({len(subs)} subreddits)")
-        print(f"{'='*50}")
-
         for sub in subs:
-            print(f"\n  Scraping r/{sub}")
-            sub_total = 0
-            for sort, tf, pages in SCRAPE_MODES:
-                label = f"{sort}/{tf}" if tf else sort
-                print(f"    [{label}] fetching...", end=" ", flush=True)
-                posts = scrape_subreddit(sub, category, sort=sort, time_filter=tf, pages=pages)
-                vids = sum(1 for p in posts if p["media_type"] == "video")
-                imgs = sum(1 for p in posts if p["media_type"] == "image")
-                print(f"found {vids} videos, {imgs} images")
+            tasks.append((sub, category))
 
+    print(f"Scraping {len(tasks)} subreddits across {len(CATEGORIES)} categories ({MAX_WORKERS} threads)\n")
+
+    start_time = time.time()
+    completed = 0
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {pool.submit(scrape_one_sub, sub, cat): (sub, cat) for sub, cat in tasks}
+
+        for future in as_completed(futures):
+            sub, cat = futures[future]
+            completed += 1
+            try:
+                posts = future.result()
+            except Exception as e:
+                print(f"  [!] r/{sub} failed: {e}", flush=True)
+                continue
+
+            if not posts:
+                continue
+
+            # DB writes are serialized with a lock
+            with _db_lock:
                 before = conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
                 for p in posts:
                     insert_post(conn, p)
                 conn.commit()
                 after_count = conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
-
                 new = after_count - before
-                sub_total += new
+                total_new += new
                 if new:
-                    print(f"           +{new} new posts added")
+                    print(f"  ✓ r/{sub} ({cat}): +{new} new posts", flush=True)
 
-                time.sleep(1)
-
-            total_new += sub_total
-            print(f"    Total new from r/{sub}: {sub_total}")
+            # ETA calculation
+            elapsed = time.time() - start_time
+            avg_per_sub = elapsed / completed
+            remaining = len(tasks) - completed
+            eta_sec = int(avg_per_sub * remaining)
+            eta_min, eta_s = divmod(eta_sec, 60)
+            eta_h, eta_min = divmod(eta_min, 60)
+            eta_str = f"{eta_h}h {eta_min}m" if eta_h else f"{eta_min}m {eta_s}s"
+            print(f"  [{completed}/{len(tasks)}] ETA: ~{eta_str}", flush=True)
 
     total = conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
     total_vids = conn.execute("SELECT COUNT(*) FROM posts WHERE media_type='video'").fetchone()[0]
